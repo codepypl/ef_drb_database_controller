@@ -30,6 +30,8 @@ class MailboxScanner:
         self._client = client or GraphClient()
         self._timezone = ZoneInfo(config.TIMEZONE())
         self._validate_period = config.VALIDATE_PERIOD()
+        self._scan_all_senders = config.SCAN_ALL_SENDERS()
+        self._allowed_senders = config.scan_allowed_senders()
 
     def run_once(self) -> None:
         scanned_at = datetime.now(self._timezone)
@@ -49,6 +51,10 @@ class MailboxScanner:
         logger.info("Processing %d message(s) from today's inbox", len(messages))
 
         for message in messages:
+            if not self._is_allowed_sender(message.sender):
+                logger.debug("Skipping message %s from %s", message.id, message.sender)
+                continue
+
             for attachment in message.attachments:
                 try:
                     if self._process_attachment(
@@ -109,6 +115,11 @@ class MailboxScanner:
         mailer.send_duplicate_alert(existing, message, attachment)
         logger.warning("Duplicate attachment detected: %s", filename)
         return False
+
+    def _is_allowed_sender(self, sender: str) -> bool:
+        if self._scan_all_senders:
+            return True
+        return sender.strip().lower() in self._allowed_senders
 
 
 def is_matching_attachment(filename: str) -> bool:

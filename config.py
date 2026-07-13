@@ -30,6 +30,17 @@ def _optional(name: str) -> str | None:
     return value or None
 
 
+def _parse_bool(name: str, *, default: bool) -> bool:
+    raw = os.getenv(name)
+    if raw is None or not raw.strip():
+        return default
+    return raw.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _parse_email_list(raw: str) -> list[str]:
+    return [address.strip().lower() for address in raw.split(",") if address.strip()]
+
+
 @lru_cache
 def AZURE_TENANT_ID() -> str:
     return _require("AZURE_TENANT_ID")
@@ -89,12 +100,32 @@ def DUPLICATE_ALERT_RECIPIENTS() -> list[str]:
 
 @lru_cache
 def VALIDATE_PERIOD() -> bool:
-    return os.getenv("VALIDATE_PERIOD", "false").strip().lower() in {
-        "1",
-        "true",
-        "yes",
-        "on",
-    }
+    return _parse_bool("VALIDATE_PERIOD", default=False)
+
+
+@lru_cache
+def SCAN_ALL_SENDERS() -> bool:
+    return _parse_bool("SCAN_ALL_SENDERS", default=True)
+
+
+@lru_cache
+def ALLOWED_SENDERS() -> list[str]:
+    raw = os.getenv("ALLOWED_SENDERS", "")
+    return _parse_email_list(raw)
+
+
+@lru_cache
+def scan_allowed_senders() -> frozenset[str]:
+    """Return allowed sender addresses when sender filtering is enabled."""
+    if SCAN_ALL_SENDERS():
+        return frozenset()
+    allowed = ALLOWED_SENDERS()
+    if not allowed:
+        raise ValueError(
+            "ALLOWED_SENDERS must contain at least one address when "
+            "SCAN_ALL_SENDERS=false"
+        )
+    return frozenset(allowed)
 
 
 @lru_cache
