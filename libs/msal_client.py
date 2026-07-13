@@ -51,11 +51,19 @@ class GraphClient:
         self._token: str | None = None
 
     @property
-    def mailbox_user(self) -> str:
-        return config.MAILBOX_USER()
+    def mail_scan_user(self) -> str:
+        return config.MAIL_SCAN_USER()
 
-    def user_url(self, path: str) -> str:
-        base = f"{config.GRAPH_BASE_URL()}/users/{self.mailbox_user}"
+    @property
+    def onedrive_user(self) -> str:
+        return config.ONEDRIVE_USER()
+
+    @property
+    def mail_send_user(self) -> str:
+        return config.MAIL_SEND_USER()
+
+    def user_url(self, user: str, path: str) -> str:
+        base = f"{config.GRAPH_BASE_URL()}/users/{user}"
         if path.startswith("/"):
             return f"{base}{path}"
         return f"{base}/{path}"
@@ -121,7 +129,7 @@ class GraphClient:
     def fetch_inbox_messages_today(self) -> list[MailMessage]:
         """Return inbox messages received today (local timezone) that have attachments."""
         start_utc, end_utc = self._today_utc_range()
-        url = self.user_url("/mailFolders/inbox/messages")
+        url = self.user_url(self.mail_scan_user, "/mailFolders/inbox/messages")
         params = {
             "$filter": (
                 f"receivedDateTime ge {start_utc} and receivedDateTime lt {end_utc} "
@@ -211,7 +219,7 @@ class GraphClient:
         }
         response = self.request(
             "POST",
-            self.user_url("/sendMail"),
+            self.user_url(self.mail_send_user, "/sendMail"),
             json=payload,
         )
         if response.status_code != 202:
@@ -308,7 +316,7 @@ class GraphClient:
     def _drive_item_path(self, remote_path: str) -> str:
         normalized = remote_path.strip("/")
         encoded = "/".join(quote(part, safe="") for part in normalized.split("/"))
-        return f"{self.user_url('/drive/root:')}:{encoded}:"
+        return f"{self.user_url(self.onedrive_user, '/drive/root:')}:{encoded}:"
 
     def _simple_upload(self, content: bytes, remote_path: str) -> str:
         url = f"{self._drive_item_path(remote_path)}/content"

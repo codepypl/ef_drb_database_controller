@@ -62,8 +62,26 @@ def GRAPH_BASE_URL() -> str:
 
 
 @lru_cache
-def MAILBOX_USER() -> str:
-    return _require("MAILBOX_USER")
+def MAILBOX_USER() -> str | None:
+    return _optional("MAILBOX_USER")
+
+
+@lru_cache
+def MAIL_SCAN_USER() -> str:
+    """User whose inbox is scanned."""
+    return _optional("MAIL_SCAN_USER") or MAILBOX_USER() or _require("MAIL_SCAN_USER")
+
+
+@lru_cache
+def ONEDRIVE_USER() -> str:
+    """User whose OneDrive stores the registry file."""
+    return _optional("ONEDRIVE_USER") or MAILBOX_USER() or _require("ONEDRIVE_USER")
+
+
+@lru_cache
+def MAIL_SEND_USER() -> str:
+    """User that sends duplicate alert e-mails."""
+    return _optional("MAIL_SEND_USER") or ONEDRIVE_USER()
 
 
 @lru_cache
