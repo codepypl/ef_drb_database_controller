@@ -10,9 +10,12 @@ load_dotenv()
 
 PROJECT_ROOT = Path(__file__).resolve().parent
 MSAL_CACHE_PATH = PROJECT_ROOT / "temp" / "msal_cache.json"
+REGISTRY_LOCAL_PATH = PROJECT_ROOT / "temp" / "registry.xlsx"
+ALERT_STATE_PATH = PROJECT_ROOT / "temp" / "alert_state.json"
 DEFAULT_TIMEZONE = "Europe/Warsaw"
 DEFAULT_GRAPH_SCOPE = "https://graph.microsoft.com/.default"
 DEFAULT_GRAPH_BASE_URL = "https://graph.microsoft.com/v1.0"
+DEFAULT_SCAN_INTERVAL_MINUTES = 30
 
 
 def _require(name: str) -> str:
@@ -71,3 +74,38 @@ def CERT_THUMBPRINT() -> str | None:
 @lru_cache
 def TIMEZONE() -> str:
     return os.getenv("TIMEZONE", DEFAULT_TIMEZONE).strip()
+
+
+@lru_cache
+def ONEDRIVE_REGISTRY_PATH() -> str:
+    return _require("ONEDRIVE_REGISTRY_PATH")
+
+
+@lru_cache
+def DUPLICATE_ALERT_RECIPIENTS() -> list[str]:
+    raw = _require("DUPLICATE_ALERT_RECIPIENTS")
+    return [address.strip() for address in raw.split(",") if address.strip()]
+
+
+@lru_cache
+def VALIDATE_PERIOD() -> bool:
+    return os.getenv("VALIDATE_PERIOD", "false").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+
+
+@lru_cache
+def SCAN_INTERVAL_MINUTES() -> int:
+    raw = os.getenv("SCAN_INTERVAL_MINUTES", str(DEFAULT_SCAN_INTERVAL_MINUTES)).strip()
+    try:
+        value = int(raw)
+    except ValueError as exc:
+        raise ValueError(
+            f"SCAN_INTERVAL_MINUTES must be an integer, got: {raw!r}"
+        ) from exc
+    if value <= 0:
+        raise ValueError("SCAN_INTERVAL_MINUTES must be greater than zero")
+    return value
