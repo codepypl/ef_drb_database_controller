@@ -10,6 +10,7 @@ from logs.app import get_app_logger
 from logs.err import get_err_logger
 from modules.mailer import DuplicateMailer
 from modules.registry import Registry
+from modules.structure import OneDriveStructure
 from modules.uploader import RegistryUploader
 
 logger = get_app_logger()
@@ -37,10 +38,8 @@ class MailboxScanner:
         scanned_at = datetime.now(self._timezone)
         today = scanned_at.date()
         registry = Registry()
-        remote_path = config.ONEDRIVE_REGISTRY_PATH()
 
-        if not self._client.download_drive_file(remote_path, registry.path):
-            logger.info("Registry not found on OneDrive; starting with an empty file")
+        OneDriveStructure(self._client).ensure_registry_structure()
 
         registry.load()
         mailer = DuplicateMailer(self._client)
