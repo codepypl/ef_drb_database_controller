@@ -169,20 +169,75 @@ class GraphClient:
         """Download a file from OneDrive. Returns False when the remote file does not exist."""
         local_path.parent.mkdir(parents=True, exist_ok=True)
         url = f"{self._drive_item_path(remote_path)}/content"
-        response = self.request("GET", url)
+        token = self.acquire_token()
 
+        with httpx.Client(timeout=120.0, follow_redirects=False) as client:
+            response = client.get(
+                url,
+                headers={"Authorization": f"Bearer {token}"},
+            )
+
+            if response.status_code == 404:
+                logger.info("OneDrive file not found: %s", remote_path)
+                return False
+
+            if response.status_code in (301, 302, 303, 307, 308):
+                download_url = response.headers.get("Location")
+                if not download_url:
+                    raise RuntimeError(
+                        f"OneDrive download redirect missing Location header for {remote_path}"
+                    )
+                response = client.get(download_url)
+
+            if response.status_code == 401:
+                token = self.acquire_token(force_refresh=True)
+                response = client.get(
+                    url,
+                    headers={"Authorization": f"Bearer {token}"},
+                )
+                if response.status_code in (301, 302, 303, 307, 308):
+                    download_url = response.headers.get("Location")
+                    if not download_url:
+                        raise RuntimeError(
+                            f"OneDrive download redirect missing Location header for {remote_path}"
+                        )
+                    response = client.get(download_url)
+
+            if response.status_code != 200:
+                raise RuntimeError(
+                    f"Failed to download OneDrive file: "
+                    f"{response.status_code} {response.text}"
+                )
+
+            local_path.write_bytes(response.content)
+
+        logger.info("Downloaded OneDrive file to %s", local_path)
+        return True
+
+    def drive_item_exists(self, remote_path: str) -> bool:
+        """Return True when a file or folder exists at the given OneDrive path."""
+        response = self.request("GET", self._drive_item_path(remote_path))
         if response.status_code == 404:
-            logger.info("OneDrive file not found: %s", remote_path)
             return False
         if response.status_code != 200:
             raise RuntimeError(
-                f"Failed to download OneDrive file: "
+                f"Failed to check OneDrive item: "
                 f"{response.status_code} {response.text}"
             )
-
-        local_path.write_bytes(response.content)
-        logger.info("Downloaded OneDrive file to %s", local_path)
         return True
+
+    def ensure_drive_folders(self, folder_path: str) -> None:
+        """Create a folder hierarchy under OneDrive root when it does not exist."""
+        normalized = folder_path.strip("/")
+        if not normalized:
+            return
+
+        cumulative = ""
+        for part in normalized.split("/"):
+            cumulative = f"{cumulative}/{part}".strip("/")
+            if self.drive_item_exists(cumulative):
+                continue
+            self._create_drive_folder(cumulative)
 
     def upload_drive_file(self, content: bytes, remote_path: str) -> str:
         """Upload bytes to OneDrive and return the item web URL."""
@@ -315,8 +370,42 @@ class GraphClient:
 
     def _drive_item_path(self, remote_path: str) -> str:
         normalized = remote_path.strip("/")
+        base = self.user_url(self.onedrive_user, "/drive/root")
+        if not normalized:
+            return base
         encoded = "/".join(quote(part, safe="") for part in normalized.split("/"))
-        return f"{self.user_url(self.onedrive_user, '/drive/root:')}:{encoded}:"
+        return f"{base}:/{encoded}:"
+
+    def _create_drive_folder(self, folder_path: str) -> None:
+        normalized = folder_path.strip("/")
+        parts = normalized.split("/")
+        name = parts[-1]
+        parent = "/".join(parts[:-1])
+
+        if parent:
+            url = f"{self._drive_item_path(parent)}:/children"
+        else:
+            url = self.user_url(self.onedrive_user, "/drive/root/children")
+
+        response = self.request(
+            "POST",
+            url,
+            json={
+                "name": name,
+                "folder": {},
+                "@microsoft.graph.conflictBehavior": "fail",
+            },
+        )
+        if response.status_code in (200, 201):
+            logger.info("Created OneDrive folder: %s", normalized)
+            return
+        if response.status_code == 409:
+            logger.debug("OneDrive folder already exists: %s", normalized)
+            return
+        raise RuntimeError(
+            f"Failed to create OneDrive folder: "
+            f"{response.status_code} {response.text}"
+        )
 
     def _simple_upload(self, content: bytes, remote_path: str) -> str:
         url = f"{self._drive_item_path(remote_path)}/content"
