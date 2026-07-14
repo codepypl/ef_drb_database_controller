@@ -51,8 +51,19 @@ class MailboxScanner:
 
         for message in messages:
             if not self._is_allowed_sender(message.sender):
-                logger.debug("Skipping message %s from %s", message.id, message.sender)
+                logger.info(
+                    "Skipping message %s from %s (sender not in ALLOWED_SENDERS)",
+                    message.id,
+                    message.sender,
+                )
                 continue
+
+            attachment_names = [attachment.name for attachment in message.attachments]
+            logger.info(
+                "Processing message from %s with attachments: %s",
+                message.sender,
+                ", ".join(attachment_names) or "(none)",
+            )
 
             for attachment in message.attachments:
                 try:
@@ -93,6 +104,7 @@ class MailboxScanner:
     ) -> bool:
         filename = attachment.name.strip()
         if not is_matching_attachment(filename):
+            logger.info("Skipping attachment %s (name does not match pattern)", filename)
             return False
 
         if self._validate_period and not is_expected_period(filename, today):
