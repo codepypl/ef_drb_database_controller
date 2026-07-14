@@ -15,7 +15,6 @@ ALERT_STATE_PATH = PROJECT_ROOT / "temp" / "alert_state.json"
 DEFAULT_TIMEZONE = "Europe/Warsaw"
 DEFAULT_GRAPH_SCOPE = "https://graph.microsoft.com/.default"
 DEFAULT_GRAPH_BASE_URL = "https://graph.microsoft.com/v1.0"
-DEFAULT_SCAN_INTERVAL_MINUTES = 30
 
 
 def _require(name: str) -> str:
@@ -144,17 +143,3 @@ def scan_allowed_senders() -> frozenset[str]:
             "SCAN_ALL_SENDERS=false"
         )
     return frozenset(allowed)
-
-
-@lru_cache
-def SCAN_INTERVAL_MINUTES() -> int:
-    raw = os.getenv("SCAN_INTERVAL_MINUTES", str(DEFAULT_SCAN_INTERVAL_MINUTES)).strip()
-    try:
-        value = int(raw)
-    except ValueError as exc:
-        raise ValueError(
-            f"SCAN_INTERVAL_MINUTES must be an integer, got: {raw!r}"
-        ) from exc
-    if value <= 0:
-        raise ValueError("SCAN_INTERVAL_MINUTES must be greater than zero")
-    return value
